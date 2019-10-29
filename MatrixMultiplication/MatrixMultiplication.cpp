@@ -1,12 +1,11 @@
-﻿// MatrixMultiplication.cpp : Этот файл содержит функцию "main". Здесь начинается и заканчивается выполнение программы.
-//
-
-#include <iostream>
+﻿#include <iostream>
 #include <vector>
 #include <random>
-#include <limits>
 
-const size_t  SIZE = 2880;
+
+// clang++ -Xpreprocessor -fopenmp matrixMultiplication.cpp -o main -lomp -std=c++11
+
+const size_t  SIZE = 4;
 
 const size_t BLOCK_SIZES[] = { 1, 6, 10, 15, 20, 24, 30, 36, 40, 60, 72, 80, 96, 120, 144, 160, 180, 240, 360, 480, 720 };
 #define BLOCK_SIZE_IND 2
@@ -136,14 +135,10 @@ size_t ** generateOffsetC() {
 inline double * addresA(const size_t row, const size_t col){
 	// shouldn't be needed if proper permutations are generated
 	// i guess
-	if (col > row)
-		return nullptr;
 	return MatrixA + offsetA[row][col];
 }
 
 inline double * addresB(const size_t row, const size_t col) {
-	if (col > row)
-		return MatrixB + offsetB[col][row];
 	return MatrixB + offsetB[row][col];
 }
 
@@ -156,8 +151,6 @@ void genereateTasks() {
 		for (size_t j = 0; j < BLOCK_COUNT; j++)
 			tasks.push_back(Task(i, j));
 }
-
-
 void printOffset(size_t ** off) {
 	for (size_t i = 0; i < BLOCK_COUNT; i++)
 	{
@@ -184,7 +177,6 @@ void printOffset(size_t ** off) {
 		 std::cout << std::endl;
 	 }
  }
-
 
  void printBlocksB() {
 	 for (size_t i = 0; i < BLOCK_COUNT; i++)
@@ -235,19 +227,32 @@ inline void multBlocks(const double* const A, const double* const B,  double* co
 			
 }
 
+inline void multBlocksT(const double* const A, const double* const B,  double* const C) {
+	for (size_t i = 0; i < BLOCK_SIZE; i++)
+		for (size_t j = 0; j < BLOCK_SIZE; j++)
+			for (size_t k = 0; k < BLOCK_SIZE; k++)
+				C[i*BLOCK_SIZE + j] += A[i*BLOCK_SIZE + k] * B[j*BLOCK_SIZE + k];
+			
+}
+
 void multMatrixes() {
-	#pragma parallel for private(i)
+	//#pragma parallel for private(i)
 	for (size_t i = 0; i < tasks.size(); i++)
 	{
 		Task t = tasks[i];
-		for (size_t k = 0; k < BLOCK_COUNT; k++)
-		{
+		//if skipping where no blocks are present and 
+		for (size_t k = 0; (k <= t.j)&&(k<=t.i) ; k++)
+		{	
 			double * A = addresA(t.i, k);
-			if (A == nullptr)
-				continue;
 			double * B = addresB(k, t.j);
 			double * C = addresC(t.i, t.j);
 			multBlocks(A, B, C);
+		}
+		for(size_t k = t.j+1; k <= t.i; k++){
+			double * A = addresA(t.i, k);
+			double * B = addresB(k, t.j);
+			double * C = addresC(t.i, t.j);
+			multBlocksT(A, B, C);
 		}
 	}
 }
