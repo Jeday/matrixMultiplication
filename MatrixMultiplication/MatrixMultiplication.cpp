@@ -3,18 +3,24 @@
 
 #include <iostream>
 #include <vector>
+#include <random>
+#include <limits>
 
-using std::size_t;
+const size_t  SIZE = 2880;
 
-#define SIZE 4
 const size_t BLOCK_SIZES[] = { 1, 6, 10, 15, 20, 24, 30, 36, 40, 60, 72, 80, 96, 120, 144, 160, 180, 240, 360, 480, 720 };
-#define BLOCK_SIZE_IND 0
+#define BLOCK_SIZE_IND 2
 const size_t BLOCK_SIZE = BLOCK_SIZES[BLOCK_SIZE_IND];
 const size_t BLOCK_COUNT = SIZE / BLOCK_SIZE;
 const size_t BLOCK_SIZE2 = BLOCK_SIZE * BLOCK_SIZE;
-
+const size_t SIZE2 = SIZE * SIZE;
 const size_t NO_ELEM = (size_t)0 - 1;
 double *MatrixA, *MatrixB, *MatrixC;
+
+std::uniform_real_distribution<double> unif(-1000, 1000);
+std::default_random_engine re;
+
+
 
 struct Task {
 public:
@@ -81,7 +87,7 @@ size_t ** generateOffsetB() {
 		result[i] = new size_t[BLOCK_COUNT]{ 0 };
 	}
 
-	// columns first
+	
 	size_t offset = 0;
 	for (size_t i = 0; i < BLOCK_COUNT; i++)
 	{
@@ -163,6 +169,63 @@ void printOffset(size_t ** off) {
 		std::cout << std::endl;
 	}
 }
+ void printBlocksA(){
+	 for (size_t i = 0; i < BLOCK_COUNT; i++)
+	 {
+		 for (size_t j = 0; j < BLOCK_COUNT; j++)
+		 {
+			 double * adr = addresA(i,j);
+			 if (adr == nullptr)
+				 std::cout << "NO_ELEM";
+			 else
+				 std::cout << adr[0];
+			 std::cout << "  ";
+		 }
+		 std::cout << std::endl;
+	 }
+ }
+
+
+ void printBlocksB() {
+	 for (size_t i = 0; i < BLOCK_COUNT; i++)
+	 {
+		 for (size_t j = 0; j < BLOCK_COUNT; j++)
+		 {
+			 double * adr = addresB(i, j);
+			 if (adr == nullptr)
+				 std::cout << "NO_ELEM";
+			 else
+				 std::cout << adr[0];
+			 std::cout << "  ";
+		 }
+		 std::cout << std::endl;
+	 }
+ }
+
+ void printBlocksС() {
+	 for (size_t i = 0; i < BLOCK_COUNT; i++)
+	 {
+		 for (size_t j = 0; j < BLOCK_COUNT; j++)
+		 {
+			 double * adr = addresC(i, j);
+			 std::cout << adr[0];
+			 std::cout << "  ";
+		 }
+		 std::cout << std::endl;
+	 }
+ }
+
+
+ void printBlock(double * blockStart) {
+	 for (size_t i = 0; i < BLOCK_SIZE; i++)
+	 {
+		 for (size_t j = 0; j < BLOCK_SIZE; j++)
+		 {
+			 std::cout << blockStart[i*BLOCK_SIZE + j] << "  ";
+		 }
+		 std::cout << std::endl;
+	 }
+ }
 
 inline void multBlocks(const double* const A, const double* const B,  double* const C) {
 	for (size_t i = 0; i < BLOCK_SIZE; i++)
@@ -173,7 +236,8 @@ inline void multBlocks(const double* const A, const double* const B,  double* co
 }
 
 void multMatrixes() {
-	for (size_t i = 0; i < tasks.size; i++)
+	#pragma parallel for private(i)
+	for (size_t i = 0; i < tasks.size(); i++)
 	{
 		Task t = tasks[i];
 		for (size_t k = 0; k < BLOCK_COUNT; k++)
@@ -189,24 +253,115 @@ void multMatrixes() {
 }
 
 
+void generateRandomBlock(double * Block) {
+	for (size_t i = 0; i < BLOCK_SIZE; i++)
+		for (size_t j = 0; j < BLOCK_SIZE; j++) {
+			Block[i*BLOCK_SIZE+j]= unif(re);
+		}
+}
+
+void generateRandomLowerTriangle(double * Block) {
+	for (size_t i = 0; i < BLOCK_SIZE; i++)
+		for (size_t j = 0; j < BLOCK_SIZE; j++) {
+			if (i < j)
+				Block[i*BLOCK_SIZE + j] = 0;
+			else
+				Block[i*BLOCK_SIZE + j] = unif(re);
+		}
+}
+
+void generateRandomSym(double * Block) {
+	for (size_t i = 0; i < BLOCK_SIZE; i++)
+		for (size_t j = 0; j < BLOCK_SIZE; j++) {
+			if (i < j)
+				continue;
+			else
+				Block[i*BLOCK_SIZE + j] = unif(re);
+		}
+	for (size_t i = 0; i < BLOCK_SIZE; i++)
+		for (size_t j = 0; j < BLOCK_SIZE; j++) {
+			if (i < j)
+				Block[i*BLOCK_SIZE + j] = Block[j*BLOCK_SIZE + i];
+			else
+				continue;
+		}
+}
+
+
 void generateMatrixA() {
-	//TODO
+	for (size_t j = 0; j < BLOCK_COUNT; j++)
+	{
+		for (size_t i = 0; i < BLOCK_COUNT; i++)
+		{
+			if (i<j)
+				continue;
+			double * A = addresA(i, j);
+			if (A == nullptr)
+				continue;
+			if (i == j)
+				generateRandomLowerTriangle(A);
+			else
+				generateRandomBlock(A);
+
+		}
+	}
 }
 
 void generateMatrixB() {
-	//TODO
+	for (size_t i = 0; i < BLOCK_COUNT; i++)
+	{
+		for (size_t j = 0; j < BLOCK_COUNT; j++)
+		{
+			if (i<j)
+				continue;
+			double * B = addresB(i, j);
+			if (i == j)
+				generateRandomSym(B);
+			else
+				generateRandomBlock(B);
+
+		}
+	}
 }
 
+
+void Debug_print(){
+	std::cout << "Matrix A blocks starts:" << std::endl;
+	printBlocksA();
+	std::cout << std::endl << std::endl;
+	std::cout << "Matrix A diagonal block:" << std::endl;
+	printBlock(addresA(BLOCK_COUNT/2, BLOCK_COUNT / 2));
+	std::cout << std::endl << std::endl;
+	std::cout << "Matrix B blocks starts:" << std::endl;
+	printBlocksB();
+	std::cout << std::endl << std::endl;
+	std::cout << "Matrix B diagonal block:" << std::endl;
+	printBlock(addresB(BLOCK_COUNT / 2, BLOCK_COUNT / 2));
+	std::cout << std::endl << std::endl;
+	std::cout << "Matrix C blocks starts:" << std::endl;
+	printBlocksС();
+}
 
 int main()
 {
 	arraySize = calcSize();
-	MatrixA = new double[arraySize] {0};
-	MatrixB = new double[arraySize] {0};
-	MatrixC = new double[SIZE*SIZE] {0};
+	MatrixA = new double[arraySize];
+	MatrixB = new double[arraySize];
+	MatrixC = new double[SIZE2];
+	for (size_t i = 0; i < SIZE2; i++)
+	{
+		MatrixC[i] = 0;
+	}
 	offsetA = generateOffsetA();
 	offsetB = generateOffsetB();
 	offsetC = generateOffsetC();
+	genereateTasks();
+	generateMatrixA();
+	generateMatrixB();
+	
+	
 	multMatrixes();
-	std::cout << std::endl;
+	//Debug_print();
+
+		
 }
